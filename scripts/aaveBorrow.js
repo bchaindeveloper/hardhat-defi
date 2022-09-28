@@ -1,19 +1,17 @@
+const { ethers, getNamedAccounts, network } = require("hardhat");
 const { getWeth, AMOUNT } = require("../scripts/getWeth.js");
 const { networkConfig } = require("../helper-hardhat-config");
-const { getNamedAccounts, ethers } = require("hardhat");
 
 async function main() {
   await getWeth();
   const { deployer } = await getNamedAccounts();
   const lendingPool = await getLendingPool(deployer);
-  console.log(`LendingPool address ${lendingPool.address}`);
-  // deposit
-  const wethTokenAddress = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-  // approve
+  const wethTokenAddress = networkConfig[network.config.chainId].wethToken;
   await approveErc20(wethTokenAddress, lendingPool.address, AMOUNT, deployer);
-  console.log("Depositing...");
+  console.log("Depositing WETH...");
   await lendingPool.deposit(wethTokenAddress, AMOUNT, deployer, 0);
-  console.log("Deposited!");
+  console.log("Desposited!");
+  // Getting your borrowing stats
   let { availableBorrowsETH, totalDebtETH } = await getBorrowUserData(
     lendingPool,
     deployer
@@ -25,10 +23,40 @@ async function main() {
     amountDaiToBorrow.toString()
   );
   console.log(`You can borrow ${amountDaiToBorrow.toString()} DAI`);
-  // borrow
+  await borrowDai(
+    networkConfig[network.config.chainId].daiToken,
+    lendingPool,
+    amountDaiToBorrowWei,
+    deployer
+  );
+  await getBorrowUserData(lendingPool, deployer);
+  await repay(
+    amountDaiToBorrowWei,
+    networkConfig[network.config.chainId].daiToken,
+    lendingPool,
+    deployer
+  );
+  await getBorrowUserData(lendingPool, deployer);
 }
 
+async function repay(amount, daiAddress, lendingPool, account) {
+  await approveErc20(daiAddress, lendingPool.address, amount, account);
+  const repayTx = await lendingPool.repay(daiAddress, amount, 1, account);
+  await repayTx.wait(1);
+  console.log("Repaid!");
+}
 
+async function borrowDai(daiAddress, lendingPool, amountDaiToBorrow, account) {
+  const borrowTx = await lendingPool.borrow(
+    daiAddress,
+    amountDaiToBorrow,
+    1,
+    0,
+    account
+  );
+  await borrowTx.wait(1);
+  console.log("You've borrowed!");
+}
 
 async function getDaiPrice() {
   const daiEthPriceFeed = await ethers.getContractAt(
@@ -38,16 +66,13 @@ async function getDaiPrice() {
   const price = (await daiEthPriceFeed.latestRoundData())[1];
   console.log(`The DAI/ETH price is ${price.toString()}`);
   return price;
-  // 0x773616e4d11a78f511299002da57a0a94577f1f4;
 }
 
-async function getBorrowUserData(lendingPool, account) {
-  const { totalCollateralETH, totalDebtETH, availableBorrowsETH } =
-    await lendingPool.getUserAccountData(account);
-  console.log(`You have ${totalCollateralETH} worth of ETH deposited.`);
-  console.log(`You have ${totalDebtETH} worth of ETH borrowed.`);
-  console.log(`You can borrow ${availableBorrowsETH} worth of ETH.`);
-  return { availableBorrowsETH, totalDebtETH };
+async function approveErc20(erc20Address, spenderAddress, amount, signer) {
+  const erc20Token = await ethers.getContractAt("IERC20", erc20Address, signer);
+  txResponse = await erc20Token.approve(spenderAddress, amount);
+  await txResponse.wait(1);
+  console.log("Approved!");
 }
 
 async function getLendingPool(account) {
@@ -66,20 +91,13 @@ async function getLendingPool(account) {
   return lendingPool;
 }
 
-async function approveErc20(
-  erc20Address,
-  spendAddress,
-  amountToSpend,
-  account
-) {
-  const erc20Token = await ethers.getContractAt(
-    "IERC20",
-    erc20Address,
-    account
-  );
-  const tx = await erc20Token.approve(spendAddress, amountToSpend);
-  await tx.wait(1);
-  console.log("Approved");
+async function getBorrowUserData(lendingPool, account) {
+  const { totalCollateralETH, totalDebtETH, availableBorrowsETH } =
+    await lendingPool.getUserAccountData(account);
+  console.log(`You have ${totalCollateralETH} worth of ETH deposited.`);
+  console.log(`You have ${totalDebtETH} worth of ETH borrowed.`);
+  console.log(`You can borrow ${availableBorrowsETH} worth of ETH.`);
+  return { availableBorrowsETH, totalDebtETH };
 }
 
 main()
