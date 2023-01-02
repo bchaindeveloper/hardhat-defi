@@ -1,5 +1,7 @@
 # A DeFi Smart Contract
 
+![Screenshot](Screenshot.png)
+
 This is a basic DeFi protocol enabling you to deposit, borrow and repay assets!
 
 ## In this contract you will be able to:
